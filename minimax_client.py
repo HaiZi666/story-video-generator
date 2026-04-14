@@ -27,12 +27,13 @@ class MiniMaxClient:
             "Content-Type": "application/json",
         }
 
-    def generate_story(self, knowledge_point: str, retry: int = 1) -> str:
+    def generate_story(self, knowledge_point: str, prompt_template: str = None, retry: int = 1) -> str:
         """
         调用 MiniMax 大模型生成故事
 
         Args:
             knowledge_point: 知识点描述
+            prompt_template: 自定义 prompt 模板（可选，默认使用 STORY_PROMPT_TEMPLATE）
             retry: 失败重试次数
 
         Returns:
@@ -47,7 +48,9 @@ class MiniMaxClient:
         url = f"{self.base_url}/text/chatcompletion_v2"
         headers = self._build_headers()
 
-        prompt = STORY_PROMPT_TEMPLATE.format(knowledge_point=knowledge_point)
+        if prompt_template is None:
+            prompt_template = STORY_PROMPT_TEMPLATE
+        prompt = prompt_template.format(knowledge_point=knowledge_point)
 
         payload = {
             "model": self.model,
@@ -88,10 +91,10 @@ class MiniMaxClient:
 
 
 # 便捷函数
-def generate_story(knowledge_point: str) -> str:
+def generate_story(knowledge_point: str, prompt_template: str = None) -> str:
     """生成故事的便捷函数"""
     client = MiniMaxClient()
-    return client.generate_story(knowledge_point)
+    return client.generate_story(knowledge_point, prompt_template)
 
 
 if __name__ == "__main__":

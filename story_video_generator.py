@@ -21,6 +21,7 @@ from config import (
     OUTPUT_DIR,
     STORIES_DIR,
     VIDEOS_DIR,
+    HISTORICAL_STORY_PROMPT_TEMPLATE,
 )
 from minimax_client import MiniMaxClient, generate_story as gen_story
 from seedace_client import SeedAceClient, generate_video as gen_video
@@ -33,6 +34,10 @@ def print_banner():
 ║         📖 课前故事视频生成器 - MVP                  ║
 ║                                                      ║
 ║  知识点 → AI 故事 → AI 视频                          ║
+║                                                      ║
+║  故事类型：                                           ║
+║    1️⃣ 普通故事 - 根据知识点生成趣味小故事            ║
+║    2️⃣ 历史故事·趣事 - 搜索历史典故，引出知识点       ║
 ╚══════════════════════════════════════════════════════╝
     """
     print(banner)
@@ -44,10 +49,32 @@ def ensure_dirs():
     os.makedirs(VIDEOS_DIR, exist_ok=True)
 
 
-def input_knowledge_point() -> str:
+def select_story_type() -> str:
+    """选择故事类型"""
+    print("\n📝 请选择故事类型：")
+    print("   1 - 普通故事（根据知识点生成趣味小故事）")
+    print("   2 - 历史故事·趣事（搜索历史典故，引出知识点）")
+    print()
+
+    while True:
+        choice = input("请输入选项（1 或 2）: ").strip()
+        if choice == "1":
+            return "normal"
+        elif choice == "2":
+            return "historical"
+        else:
+            print("⚠️  无效选项，请输入 1 或 2")
+
+
+def input_knowledge_point(story_type: str) -> str:
     """获取知识点输入"""
-    print("\n📝 请输入知识点描述（按回车结束）：")
-    print("   （例如：光的折射——为什么筷子放在水里看起来像折断了？）")
+    if story_type == "historical":
+        print("\n📝 请输入知识点描述（按回车结束）：")
+        print("   （例如：光的折射——为什么筷子放在水里看起来像折断了？）")
+        print("   （系统将搜索相关的历史典故、趣事来引出知识点）")
+    else:
+        print("\n📝 请输入知识点描述（按回车结束）：")
+        print("   （例如：光的折射——为什么筷子放在水里看起来像折断了？）")
     print()
 
     knowledge_point = input("> ").strip()
@@ -59,18 +86,30 @@ def input_knowledge_point() -> str:
     return knowledge_point
 
 
-def generate_and_save_story(knowledge_point: str) -> tuple[str, str]:
+def generate_and_save_story(knowledge_point: str, story_type: str = "normal") -> tuple[str, str]:
     """
     生成故事并保存
+
+    Args:
+        knowledge_point: 知识点
+        story_type: 故事类型，"normal" 或 "historical"
 
     Returns:
         (story_text, story_path)
     """
-    print("\n🤖 正在调用 MiniMax 生成故事...")
-    print("   （预计 10-30 秒，请耐心等待...）\n")
+    if story_type == "historical":
+        print("\n🔍 正在搜索历史典故...")
+        print("\n🤖 正在调用 MiniMax 整理历史故事...")
+        print("   （预计 10-30 秒，请耐心等待...）\n")
+        prompt_template = HISTORICAL_STORY_PROMPT_TEMPLATE
+    else:
+        print("\n🤖 正在调用 MiniMax 生成故事...")
+        print("   （预计 10-30 秒，请耐心等待...）\n")
+        prompt_template = STORY_PROMPT_TEMPLATE
 
     try:
-        story = gen_story(knowledge_point)
+        from minimax_client import generate_story as gen_story
+        story = gen_story(knowledge_point, prompt_template)
     except Exception as e:
         print(f"\n❌ 故事生成失败：{e}")
         sys.exit(1)
@@ -78,15 +117,18 @@ def generate_and_save_story(knowledge_point: str) -> tuple[str, str]:
     # 保存故事文本
     story_id = str(uuid.uuid4())[:8]
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    prefix = "historical" if story_type == "historical" else "story"
     story_path = os.path.join(
         STORIES_DIR,
-        f"story_{timestamp}_{story_id}.txt"
+        f"{prefix}_{timestamp}_{story_id}.txt"
     )
 
     os.makedirs(STORIES_DIR, exist_ok=True)
 
+    story_type_label = "历史故事·趣事" if story_type == "historical" else "普通故事"
     with open(story_path, "w", encoding="utf-8") as f:
         f.write(f"知识点：{knowledge_point}\n")
+        f.write(f"故事类型：{story_type_label}\n")
         f.write(f"生成时间：{datetime.now()}\n")
         f.write(f"故事ID：{story_id}\n")
         f.write("=" * 50 + "\n\n")
@@ -167,13 +209,16 @@ def main():
     print_banner()
     ensure_dirs()
 
-    # Step 1: 输入知识点
-    knowledge_point = input_knowledge_point()
+    # Step 1: 选择故事类型
+    story_type = select_story_type()
 
-    # Step 2: 生成故事
-    story, story_path = generate_and_save_story(knowledge_point)
+    # Step 2: 输入知识点
+    knowledge_point = input_knowledge_point(story_type)
 
-    # Step 3: 展示故事并确认
+    # Step 3: 生成故事
+    story, story_path = generate_and_save_story(knowledge_point, story_type)
+
+    # Step 4: 展示故事并确认
     while True:
         print_story(story)
 
@@ -182,7 +227,7 @@ def main():
         if confirm is None:
             # 重新生成故事
             print("\n🔄 重新生成故事...")
-            story, story_path = generate_and_save_story(knowledge_point)
+            story, story_path = generate_and_save_story(knowledge_point, story_type)
             continue
 
         if not confirm:
@@ -194,7 +239,7 @@ def main():
 
         # 确认生成视频
         # 提取 story_id 从路径
-        story_id = os.path.basename(story_path).replace("story_", "").replace(".txt", "").split("_")[-1]
+        story_id = os.path.basename(story_path).replace("story_", "").replace("historical_", "").replace(".txt", "").split("_")[-1]
         video_path = do_generate_video(story, story_id)
 
         if video_path:
